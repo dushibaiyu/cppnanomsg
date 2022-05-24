@@ -172,7 +172,7 @@ public:
     inline nn_iovec recv (int flags = 0)
     {
         void * buf = nullptr;
-        int rc = nn_recv (s, buf, NN_MSG, flags);
+        int rc = nn_recv (s, &buf, NN_MSG, flags);
         if (nn_slow (rc < 0)) {
             if (nn_slow (nn_errno () != EAGAIN))
                 throw nn::exception ();
