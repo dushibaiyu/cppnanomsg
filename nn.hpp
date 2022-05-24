@@ -89,6 +89,22 @@ inline int freemsg (void *msg)
     return rc;
 }
 
+struct soecketmsg
+{
+    void * buf = nullptr;
+    size_t length = 0;
+
+    inline ~soecketmsg(){
+        if(buf)
+            freemsg(buf);
+    }
+private:
+    soecketmsg(soecketmsg &) = delete;
+    void operator = (const soecketmsg&) = delete;
+};
+
+typedef soecketmsg msgctl;
+
 class socket
 {
 public:
@@ -168,17 +184,16 @@ public:
         return rc;
     }
 
-    // Note: free use freemsg(ret.iov_base)
-    inline nn_iovec recv (int flags = 0)
+    inline soecketmsg recv (int flags = 0)
     {
         void * buf = nullptr;
         int rc = nn_recv (s, &buf, NN_MSG, flags);
         if (nn_slow (rc < 0)) {
             if (nn_slow (nn_errno () != EAGAIN))
                 throw nn::exception ();
-            return nn_iovec{nullptr,0};
+            return soecketmsg{nullptr,0};
         }
-        return nn_iovec{buf,static_cast<size_t>(rc)};
+        return soecketmsg{buf,static_cast<size_t>(rc)};
     }
 
     inline int sendmsg (const struct nn_msghdr *msghdr, int flags = 0)
@@ -192,6 +207,24 @@ public:
         return rc;
     }
 
+    inline int sendmsg (const void *buf, size_t len, msgctl * ctl,int flags = 0)
+    {
+        struct nn_iovec vec [1];
+        struct nn_msghdr ret;
+        vec [0].iov_base = const_cast<void *>(buf);
+        vec [0].iov_len = len;
+        ret.msg_iov = vec;
+        ret.msg_iovlen = 1;
+        ret.msg_control = &(ctl->buf);
+        ret.msg_controllen = ctl->length;
+        return sendmsg(&ret,flags);
+    }
+
+    inline int sendmsg (soecketmsg & msg, msgctl * ctl,int flags = 0)
+    {
+        return sendmsg(msg.buf,msg.length,ctl,flags);
+    }
+
     inline int recvmsg (struct nn_msghdr *msghdr, int flags = 0)
     {
         int rc = nn_recvmsg (s, msghdr, flags);
@@ -203,13 +236,35 @@ public:
         return rc;
     }
 
+    inline soecketmsg recvmsg (msgctl * ctl,int flags = 0)
+    {
+        void * buf = nullptr;
+        int rc =  recvmsg(&buf,NN_MSG,ctl,flags);
+        return soecketmsg{buf,static_cast<size_t>(rc)};
+    }
+
+    inline int recvmsg (void *buf, size_t len,msgctl * ctl, int flags = 0)
+    {
+        struct nn_iovec vec [1];
+        struct nn_msghdr ret;
+        vec [0].iov_base = buf;
+        vec [0].iov_len = len;
+        ret.msg_iov = vec;
+        ret.msg_iovlen = 1;
+        ret.msg_control = &(ctl->buf);
+        ret.msg_controllen = NN_MSG;
+        int rc = recvmsg(&ret,flags);
+        ctl->length = ret.msg_controllen;
+        return rc;
+    }
+
 private:
 
     int s;
 
     /*  Prevent making copies of the socket by accident. */
     socket (const socket&) = delete;
-    void operator = (const socket&);
+    void operator = (const socket&) = delete;
 };
 
 inline void term ()

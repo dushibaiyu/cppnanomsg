@@ -24,19 +24,75 @@
 
 #include <nanomsg/pair.h>
 
-#include <cassert>
+#include <iostream>
+#include <thread>
+#include <chrono>
+#include <functional>
+
+int a = 0;
+
+void handle(nn::socket * s){
+    nn::msgctl * ctl = new nn::msgctl{};
+    while (true) {
+        try{
+//            if(nn::poll(*s,0,true,false) == 0) //判断读状态
+//                continue;
+            auto msg = s->recv();
+            std::string h{"ret "};
+            h += std::string((const char *)msg.buf,msg.length);
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            std::cout << std::this_thread::get_id() << "  handle : " << h << std::endl;
+//            while(true){
+//                if(nn::poll(*s,0,false,true)) {
+//                   s->sendmsg(h.data(),h.size(),ctl);
+                    s->send(h.data(),h.size());
+//                    break;
+//                }
+//            }
+        } catch(nn::exception & e) {
+           std::cout << std::this_thread::get_id() << " out : " << e.what() << std::endl;
+        }
+
+    }
+}
+
+void client(){
+    nn::socket s2 (AF_SP, NN_REQ);
+    s2.connect ("tcp://127.0.0.1:10888");
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    char aa[64];
+    for(int  i = 0; i < 20 ; ++i){
+         ++ a;
+        int ta = a;
+        memset(aa,0,64);
+        sprintf(aa,"hello word %d, index %d",ta,i);
+        s2.send(aa,strlen(aa));
+        auto m = s2.recv();
+        std::cout << std::this_thread::get_id() << "  client : " << reinterpret_cast<char *>(m.buf) <<
+                  "  ta = " << ta << "   i = " << i <<std::endl;
+    }
+     std::cout << std::this_thread::get_id()  << " end " << std::endl;
+}
 
 int main ()
 {
-    nn::socket s1 (AF_SP, NN_PAIR);
-    s1.bind ("inproc://a");
-    nn::socket s2 (AF_SP, NN_PAIR);
-    s2.connect ("inproc://a");
+    nn::socket s1 (AF_SP, NN_REP);
+    s1.bind ("tcp://127.0.0.1:10888");
+    std::this_thread::sleep_for(std::chrono::seconds(2));
 
-    s2.send ("ABC", 3, 0);
-    char buf [3];
-    int rc = s1.recv (buf, sizeof (buf), 0);
-    assert (rc == 3);
+    std::thread t1(std::bind(handle,&s1));
+//    std::thread t2(std::bind(handle,&s1)); //多线程同时处理还是有问题的
+    std::thread t5(std::bind(client));
+    std::thread t6(std::bind(client));
+//    std::thread t7(std::bind(client));
+//    std::thread t8(std::bind(client));
+//    std::thread t9(std::bind(client));
 
+    t5.join();
+    t6.join();
+
+    std::cout << "client end!" << std::endl;
+    t1.join();
+//    t2.join();
     return 0;
 }
