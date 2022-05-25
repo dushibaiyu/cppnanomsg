@@ -103,7 +103,10 @@ private:
     void operator = (const soecketmsg&) = delete;
 };
 
-typedef soecketmsg msgctl;
+struct msgctl {
+    void * control;
+    size_t controllen;
+};
 
 class socket
 {
@@ -207,7 +210,7 @@ public:
         return rc;
     }
 
-    inline int sendmsg (const void *buf, size_t len, msgctl * ctl,int flags = 0)
+    inline int sendmsg (const void *buf, size_t len, msgctl & ctl,int flags = 0)
     {
         struct nn_iovec vec [1];
         struct nn_msghdr ret;
@@ -215,12 +218,12 @@ public:
         vec [0].iov_len = len;
         ret.msg_iov = vec;
         ret.msg_iovlen = 1;
-        ret.msg_control = &(ctl->buf);
-        ret.msg_controllen = ctl->length;
+        ret.msg_control = &(ctl.control);
+        ret.msg_controllen = ctl.controllen;
         return sendmsg(&ret,flags);
     }
 
-    inline int sendmsg (soecketmsg & msg, msgctl * ctl,int flags = 0)
+    inline int sendmsg (soecketmsg & msg, msgctl & ctl,int flags = 0)
     {
         return sendmsg(msg.buf,msg.length,ctl,flags);
     }
@@ -251,10 +254,10 @@ public:
         vec [0].iov_len = len;
         ret.msg_iov = vec;
         ret.msg_iovlen = 1;
-        ret.msg_control = &(ctl->buf);
+        ret.msg_control = &(ctl->control);
         ret.msg_controllen = NN_MSG;
         int rc = recvmsg(&ret,flags);
-        ctl->length = ret.msg_controllen;
+        ctl->controllen = ret.msg_controllen;
         return rc;
     }
 
